@@ -35,6 +35,34 @@ app.use(cookieParser());
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
+
+function auth(request, response, next) {
+  console.log(request.headers);
+  const authHeader = request.headers.authorization;
+
+  if (!authHeader) {
+    const error = new Error("You are not authenticated");
+    response.setHeader("WWW-Authenticate", "Basic");
+    error.status = 401;
+    return next(error);
+  }
+
+  const auth = new Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(":");
+  const userName = auth[0];
+  const password = auth[1];
+
+  if (userName === "admin" && password === "password") {
+    next();
+  } else {
+    const error = new Error("You are not authenticated");
+    response.setHeader("WWW-Authenticate", "Basic");
+    error.status = 401;
+    return next(error);
+  }
+}
+
+app.use(auth);
+
 app.use(express.static(path.join(__dirname, 'public'))); // serves static data from public folder
 
 app.use('/', index);
