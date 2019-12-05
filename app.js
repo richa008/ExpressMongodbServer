@@ -30,7 +30,7 @@ var app = express();
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cookieParser());
+app.use(cookieParser("12345-67890-09876-54321")); // secret key
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -40,25 +40,36 @@ function auth(request, response, next) {
     console.log(request.headers);
     const authHeader = request.headers.authorization;
 
-    if (!authHeader) {
-        const error = new Error("You are not authenticated");
-        response.setHeader("WWW-Authenticate", "Basic");
-        error.status = 401;
-        return next(error);
-    }
+    if (!request.signedCookies.user) {
+        if (!authHeader) {
+            return showError(response, next);
+        }
 
-    const auth = new Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(":");
-    const userName = auth[0];
-    const password = auth[1];
+        const auth = new Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(":");
+        const userName = auth[0];
+        const password = auth[1];
 
-    if (userName === "admin" && password === "password") {
-        next();
-    } else {
-        const error = new Error("You are not authenticated");
-        response.setHeader("WWW-Authenticate", "Basic");
-        error.status = 401;
-        return next(error);
+        if (userName === "admin" && password === "password") {
+            response.cookie('user', 'admin', { signed: true });
+            next();
+        } else {
+            return showError(response, next);
+        }
     }
+    else {
+        if (request.signedCookies.user === "admin") {
+            next();
+        } else {
+            return showError(response, next);
+        }
+    }
+}
+
+function showError(response, next) {
+    const error = new Error("You are not authenticated");
+    response.setHeader("WWW-Authenticate", "Basic");
+    error.status = 401;
+    return next(error);
 }
 
 app.use(auth);
