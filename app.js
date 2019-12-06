@@ -1,14 +1,16 @@
-var express = require('express');
-var path = require('path');
-var logger = require('morgan');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
+const express = require('express');
+const path = require('path');
+const logger = require('morgan');
+const cookieParser = require('cookie-parser');
+const bodyParser = require('body-parser');
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 
-var index = require('./routes/index');
-var users = require('./routes/users');
-var dishRouter = require('./routes/dishRouter');
-var promoRouter = require('./routes/promoRouter');
-var leaderRouter = require('./routes/leaderRouter');
+const index = require('./routes/index');
+const userRouter = require('./routes/userRouter');
+const dishRouter = require('./routes/dishRouter');
+const promoRouter = require('./routes/promoRouter');
+const leaderRouter = require('./routes/leaderRouter');
 
 const mongoose = require('mongoose');
 mongoose.Promise = require('bluebird');
@@ -30,54 +32,47 @@ var app = express();
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cookieParser("12345-67890-09876-54321")); // secret key
+
+// app.use(cookieParser("12345-67890-09876-54321")); // secret key
+
+app.use(session({
+    name: "session-id",
+    secret: "12345-67890-09876-54321",
+    saveUninitialized: false,
+    resave: false,
+    store: new FileStore()
+}));
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 
-function auth(request, response, next) {
-    console.log(request.headers);
-    const authHeader = request.headers.authorization;
-
-    if (!request.signedCookies.user) {
-        if (!authHeader) {
-            return showError(response, next);
-        }
-
-        const auth = new Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(":");
-        const userName = auth[0];
-        const password = auth[1];
-
-        if (userName === "admin" && password === "password") {
-            response.cookie('user', 'admin', { signed: true });
-            next();
-        } else {
-            return showError(response, next);
-        }
-    }
-    else {
-        if (request.signedCookies.user === "admin") {
-            next();
-        } else {
-            return showError(response, next);
-        }
-    }
-}
-
-function showError(response, next) {
+function showError(next) {
     const error = new Error("You are not authenticated");
-    response.setHeader("WWW-Authenticate", "Basic");
     error.status = 401;
     return next(error);
 }
 
-app.use(auth);
+function auth(request, response, next) {
+    console.log(request.session);
+
+    if (request.session.user) {
+        if (request.session.user === "authenticated") {
+            next();
+        } else {
+            showError(next);
+        }
+    } else {
+        showError(next);
+    }
+}
 
 app.use(express.static(path.join(__dirname, 'public'))); // serves static data from public folder
 
 app.use('/', index);
-app.use('/users', users);
+app.use('/users', userRouter);
+
+app.use(auth);
 app.use('/dishes', dishRouter);
 app.use('/promotions', promoRouter);
 app.use('/leaders', leaderRouter);
