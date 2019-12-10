@@ -5,6 +5,8 @@ const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
+const passport = require('passport');
+const authenticate = require('./authenticate');
 
 const index = require('./routes/index');
 const userRouter = require('./routes/userRouter');
@@ -32,9 +34,6 @@ var app = express();
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-
-// app.use(cookieParser("12345-67890-09876-54321")); // secret key
-
 app.use(session({
     name: "session-id",
     secret: "12345-67890-09876-54321",
@@ -42,32 +41,26 @@ app.use(session({
     resave: false,
     store: new FileStore()
 }));
+app.use(passport.initialize());
+app.use(passport.session()); // Required for persistent login sessions
+app.use(express.static(path.join(__dirname, 'public'))); // serves static data from public folder
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 
-function showError(next) {
-    const error = new Error("You are not authenticated");
-    error.status = 401;
-    return next(error);
-}
+function auth(req, res, next) {
+    console.log(req.user);
 
-function auth(request, response, next) {
-    console.log(request.session);
-
-    if (request.session.user) {
-        if (request.session.user === "authenticated") {
-            next();
-        } else {
-            showError(next);
-        }
-    } else {
-        showError(next);
+    if (!req.user) {
+        var err = new Error('You are not authenticated!');
+        err.status = 403;
+        next(err);
+    }
+    else {
+        next();
     }
 }
-
-app.use(express.static(path.join(__dirname, 'public'))); // serves static data from public folder
 
 app.use('/', index);
 app.use('/users', userRouter);
